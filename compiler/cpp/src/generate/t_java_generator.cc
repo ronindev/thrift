@@ -2313,6 +2313,24 @@ void t_java_generator::generate_java_bean_boilerplate(ofstream& out, t_struct* t
         indent(out) << "return this." << field_name << ";" << endl;
         indent_down();
         indent(out) << "}" << endl << endl;
+
+        //Add getNullable
+        if (type->is_base_type() && !type->is_string() && !type->is_void()) {
+          indent(out) << "public " << type_name(type, true);
+          out << " get" << cap_name << "Nullable() {" << endl;
+          indent_up();
+          indent(out) << "if (this.isSet" << cap_name << "()) {" << endl;
+          indent_up();
+          indent(out) << "return " << field_name << ";" << endl;
+          indent_down();
+          indent(out) << "} else {" << endl;
+          indent_up();
+          indent(out) << "return null;" << endl;
+          indent_down();
+          indent(out) << "}" << endl;
+          indent_down();
+          indent(out) << "}" << endl << endl;
+        }
       }
     }
 
@@ -2356,6 +2374,42 @@ void t_java_generator::generate_java_bean_boilerplate(ofstream& out, t_struct* t
 
     indent_down();
     indent(out) << "}" << endl << endl;
+
+    //Add setNullable
+    if (type->is_base_type() && !type->is_string() && !type->is_void() && !((t_base_type*)type)->is_binary()) {
+      indent(out) << "public ";
+      if (bean_style_) {
+        out << "void";
+      } else {
+        out << type_name(tstruct, true);
+      }
+      out << " set" << cap_name << "Nullable(" << type_name(type, true) << " " << field_name << ") {" << endl;
+      indent_up();
+      indent(out) << "if (" << field_name << " == null) {" << endl;
+      indent_up();
+      indent(out) << "this." << field_name << " = ";
+      if (((t_base_type*)type)->get_base() == t_base_type::TYPE_BOOL) {
+        out << "false;" << endl;
+      } else {
+        out << "0;" << endl;
+      }
+      indent(out) << "set" << get_cap_name(field->get_name()) << get_cap_name("isSet")
+        << "(false);" << endl;
+      indent_down();
+      indent(out) << "} else {" << endl;
+      indent_up();
+      indent(out) << "this." << field_name << " = " << field_name << ";" << endl;
+      indent(out) << "set" << get_cap_name(field->get_name()) << get_cap_name("isSet")
+        << "(true);" << endl;
+      indent_down();
+      indent(out) << "}" << endl;
+      if (!bean_style_) {
+        indent(out) << "return this;" << endl;
+      }
+
+      indent_down();
+      indent(out) << "}" << endl << endl;
+    }
 
     // Unsetter
     indent(out) << "public void unset" << cap_name << "() {" << endl;
