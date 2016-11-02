@@ -2310,6 +2310,13 @@ void t_java_generator::generate_java_bean_boilerplate(ofstream& out, t_struct* t
         }
         out << cap_name << "() {" << endl;
         indent_up();
+        if (type->is_set() || type->is_list() || type->is_map()) {
+          indent(out) << "if (!isSet" << cap_name << "()) {" << endl;
+          indent_up();
+          indent(out) << "throw new RuntimeException(\"" << cap_name << " is not initialized\");" << endl;
+          indent_down();
+          indent(out) << "}" << endl;
+        } 
         indent(out) << "return this." << field_name << ";" << endl;
         indent_down();
         indent(out) << "}" << endl << endl;
