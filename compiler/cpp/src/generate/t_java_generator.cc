@@ -163,6 +163,7 @@ public:
                                    std::string cap_name);
   void generate_reflection_getters(std::ostringstream& out,
                                    t_type* type,
+                                   t_field* field,
                                    std::string field_name,
                                    std::string cap_name);
   void generate_generic_field_getters_setters(std::ofstream& out, t_struct* tstruct);
@@ -2049,11 +2050,12 @@ void t_java_generator::generate_java_struct_field_by_id(ofstream& out, t_struct*
 
 void t_java_generator::generate_reflection_getters(ostringstream& out,
                                                    t_type* type,
+                                                   t_field* field,
                                                    string field_name,
                                                    string cap_name) {
   indent(out) << "case " << constant_name(field_name) << ":" << endl;
   indent_up();
-  indent(out) << "return " << (type->is_bool() ? "is" : "get") << cap_name << "();" << endl << endl;
+  indent(out) << "return " << (type->is_bool() && field->get_req() != t_field::T_OPTIONAL ? "is" : "get") << cap_name << "();" << endl << endl;
   indent_down();
 }
 
@@ -2089,7 +2091,7 @@ void t_java_generator::generate_generic_field_getters_setters(std::ofstream& out
 
     indent_up();
     generate_reflection_setters(setter_stream, type, field_name, cap_name);
-    generate_reflection_getters(getter_stream, type, field_name, cap_name);
+    generate_reflection_getters(getter_stream, type, field, field_name, cap_name);
     indent_down();
   }
 
@@ -2158,6 +2160,7 @@ void t_java_generator::generate_java_bean_boilerplate(ofstream& out, t_struct* t
     std::string field_name = field->get_name();
     std::string cap_name = get_cap_name(field_name);
     bool optional = use_option_type_ && field->get_req() == t_field::T_OPTIONAL;
+    bool optionalField = field->get_req() == t_field::T_OPTIONAL;
 
     if (type->is_container()) {
       // Method to return the size of the collection
@@ -2301,6 +2304,21 @@ void t_java_generator::generate_java_bean_boilerplate(ofstream& out, t_struct* t
         indent(out) << "}" << endl;
         indent_down();
         indent(out) << "}" << endl << endl;
+      } else if (optionalField && type->is_base_type() && !type->is_string() && !type->is_void()) {
+          indent(out) << "public " << type_name(type, true);
+          out << " get" << cap_name << "() {" << endl;
+          indent_up();
+          indent(out) << "if (this.isSet" << cap_name << "()) {" << endl;
+          indent_up();
+          indent(out) << "return " << field_name << ";" << endl;
+          indent_down();
+          indent(out) << "} else {" << endl;
+          indent_up();
+          indent(out) << "return null;" << endl;
+          indent_down();
+          indent(out) << "}" << endl;
+          indent_down();
+          indent(out) << "}" << endl << endl;
       } else {
         indent(out) << "public " << type_name(type);
         if (type->is_base_type() && ((t_base_type*)type)->get_base() == t_base_type::TYPE_BOOL) {
@@ -2320,24 +2338,6 @@ void t_java_generator::generate_java_bean_boilerplate(ofstream& out, t_struct* t
         indent(out) << "return this." << field_name << ";" << endl;
         indent_down();
         indent(out) << "}" << endl << endl;
-
-        //Add getNullable
-        if (type->is_base_type() && !type->is_string() && !type->is_void()) {
-          indent(out) << "public " << type_name(type, true);
-          out << " get" << cap_name << "Nullable() {" << endl;
-          indent_up();
-          indent(out) << "if (this.isSet" << cap_name << "()) {" << endl;
-          indent_up();
-          indent(out) << "return " << field_name << ";" << endl;
-          indent_down();
-          indent(out) << "} else {" << endl;
-          indent_up();
-          indent(out) << "return null;" << endl;
-          indent_down();
-          indent(out) << "}" << endl;
-          indent_down();
-          indent(out) << "}" << endl << endl;
-        }
       }
     }
 
@@ -2359,38 +2359,15 @@ void t_java_generator::generate_java_bean_boilerplate(ofstream& out, t_struct* t
       }
       indent(out) << "}" << endl << endl;
     }
-    indent(out) << "public ";
-    if (bean_style_) {
-      out << "void";
-    } else {
-      out << type_name(tstruct);
-    }
-    out << " set" << cap_name << "(" << type_name(type) << " " << field_name << ") {" << endl;
-    indent_up();
-    indent(out) << "this." << field_name << " = ";
-    if (type->is_base_type() && ((t_base_type*)type)->is_binary()) {
-      out << "org.apache.thrift.TBaseHelper.copyBinary(" << field_name << ")";
-    } else {
-      out << field_name;
-    }
-    out << ";" << endl;
-    generate_isset_set(out, field, "");
-    if (!bean_style_) {
-      indent(out) << "return this;" << endl;
-    }
 
-    indent_down();
-    indent(out) << "}" << endl << endl;
-
-    //Add setNullable
-    if (type->is_base_type() && !type->is_string() && !type->is_void() && !((t_base_type*)type)->is_binary()) {
+    if (optionalField && type->is_base_type() && !type->is_string() && !type->is_void() && !((t_base_type*)type)->is_binary()) {
       indent(out) << "public ";
       if (bean_style_) {
         out << "void";
       } else {
         out << type_name(tstruct, true);
       }
-      out << " set" << cap_name << "Nullable(" << type_name(type, true) << " " << field_name << ") {" << endl;
+      out << " set" << cap_name << "(" << type_name(type, true) << " " << field_name << ") {" << endl;
       indent_up();
       indent(out) << "if (" << field_name << " == null) {" << endl;
       indent_up();
@@ -2410,6 +2387,29 @@ void t_java_generator::generate_java_bean_boilerplate(ofstream& out, t_struct* t
         << "(true);" << endl;
       indent_down();
       indent(out) << "}" << endl;
+      if (!bean_style_) {
+        indent(out) << "return this;" << endl;
+      }
+
+      indent_down();
+      indent(out) << "}" << endl << endl;
+    } else {
+      indent(out) << "public ";
+      if (bean_style_) {
+        out << "void";
+      } else {
+        out << type_name(tstruct);
+      }
+      out << " set" << cap_name << "(" << type_name(type) << " " << field_name << ") {" << endl;
+      indent_up();
+      indent(out) << "this." << field_name << " = ";
+      if (type->is_base_type() && ((t_base_type*)type)->is_binary()) {
+        out << "org.apache.thrift.TBaseHelper.copyBinary(" << field_name << ")";
+      } else {
+        out << field_name;
+      }
+      out << ";" << endl;
+      generate_isset_set(out, field, "");
       if (!bean_style_) {
         indent(out) << "return this;" << endl;
       }
